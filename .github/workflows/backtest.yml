@@ -17,7 +17,7 @@ permissions:
 jobs:
   weekly-backtest:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 440
     concurrency:
       group: okx-quant-portfolio-state
       cancel-in-progress: false
