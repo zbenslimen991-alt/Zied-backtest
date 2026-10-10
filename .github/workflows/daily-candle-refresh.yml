@@ -1,9 +1,10 @@
-name: Daily Historical Candle Refresh
+name: Every-Other-Day Historical Candle Refresh
 
 on:
   schedule:
-    # Refresh stored market history every day at 02:00 UTC, before monthly batch runs.
-    - cron: '0 2 * * *'
+    # Refresh stored market history every other calendar day at 02:00 UTC.
+    # GitHub cron day-of-month stepping is calendar-based (*/2).
+    - cron: '0 2 */2 * *'
   workflow_dispatch: {}
 
 permissions:
@@ -98,8 +99,15 @@ jobs:
             echo "No candle-history changes to commit."
             exit 0
           fi
-          git commit -m "Refresh daily historical candle cache"
-          git push
+          git commit -m "Refresh historical candle cache"
+
+          # The app repository may receive commits from another workflow after
+          # checkout. Rebase this refresh commit onto the latest remote main
+          # before pushing, so a normal concurrent update does not fail with
+          # "[rejected] (fetch first)".
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
 
       - name: Upload candle refresh log
         if: always()
