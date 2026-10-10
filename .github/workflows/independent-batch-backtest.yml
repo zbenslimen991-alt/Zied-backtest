@@ -2,7 +2,8 @@ name: Independent 20-Coin Backtest Batches
 
 on:
   schedule:
-    - cron: '0 3 * * 0'
+    # First day of each month at 03:00 UTC
+    - cron: '0 3 1 * *'
   workflow_dispatch:
     inputs:
       batch_index:
