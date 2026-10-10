@@ -15,6 +15,11 @@ on:
         required: false
         default: '0'
         type: string
+      retry_count:
+        description: 'Internal retry counter (maximum 2 retries)'
+        required: false
+        default: '0'
+        type: string
 
 permissions:
   contents: read
@@ -68,6 +73,17 @@ jobs:
         run: |
           set -o pipefail
           python okx_quant/weekly_backtest.py 2>&1 | tee "${RUNNER_TEMP}/weekly-backtest.log"
+
+      - name: Retry failed batch (up to 2 retries)
+        if: failure() && inputs.retry_count != '2' && steps.backtest.outputs.batch_index != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURRENT_BATCH: ${{ inputs.batch_index || '0' }}
+          RETRY_COUNT: ${{ inputs.retry_count || '0' }}
+          WORKFLOW_REF: ${{ github.ref_name }}
+        run: |
+          NEXT_RETRY=$((RETRY_COUNT + 1))
+          gh workflow run backtest.yml --ref "$WORKFLOW_REF" -f batch_index="$CURRENT_BATCH" -f retry_count="$NEXT_RETRY"
 
       - name: Dispatch next independent 20-coin run
         if: success() && steps.backtest.outputs.is_last_batch == 'false'
