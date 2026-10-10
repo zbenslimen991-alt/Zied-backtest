@@ -17,7 +17,9 @@ permissions:
 jobs:
   weekly-backtest:
     runs-on: ubuntu-latest
-    timeout-minutes: 4400
+    # GitHub-hosted Ubuntu runners are capped at 6 hours per job.
+    # Leave a safety margin so cancellation can be handled cleanly.
+    timeout-minutes: 350
     concurrency:
       group: okx-quant-portfolio-state
       cancel-in-progress: false
@@ -59,6 +61,7 @@ jobs:
           python okx_quant/weekly_backtest.py 2>&1 | tee "${RUNNER_TEMP}/weekly-backtest.log"
 
       - name: Run weekly Learning
+        if: success()
         working-directory: app
         run: |
           set -o pipefail
