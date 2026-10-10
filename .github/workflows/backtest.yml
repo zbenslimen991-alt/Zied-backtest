@@ -1,25 +1,20 @@
-name: Weekly Backtest + Learning
+name: Monthly Backtest
 
 on:
-  # Run a fresh backtest when this workflow definition is updated; this also
-  # allows validating the latest application code and performance settings.
-  push:
-    paths:
-      - '.github/workflows/backtest.yml'
   schedule:
-    - cron: '0 3 * * 0'
+    # First day of each month at 03:00 UTC
+    - cron: '0 3 1 * *'
   workflow_dispatch: {}
 
 permissions:
   contents: read
-  actions: write
 
 jobs:
-  weekly-backtest:
+  monthly-backtest:
     runs-on: ubuntu-latest
-    # GitHub-hosted Ubuntu runners are capped at 6 hours per job.
-    # Leave a safety margin so cancellation can be handled cleanly.
     timeout-minutes: 350
+    # Shared across workflows so monthly backtest and daily learning never
+    # write the shared portfolio/model state concurrently.
     concurrency:
       group: okx-quant-portfolio-state
       cancel-in-progress: false
@@ -50,31 +45,23 @@ jobs:
         working-directory: app
         run: |
           set -o pipefail
-          python -m pytest -q 2>&1 | tee "${RUNNER_TEMP}/weekly-tests.log"
+          python -m pytest -q 2>&1 | tee "${RUNNER_TEMP}/monthly-tests.log"
 
-      - name: Run weekly Backtest
+      - name: Run monthly Backtest
         working-directory: app
         env:
           FORCE_WEEKLY_BACKTEST: '1'
         run: |
           set -o pipefail
-          python okx_quant/weekly_backtest.py 2>&1 | tee "${RUNNER_TEMP}/weekly-backtest.log"
+          python okx_quant/weekly_backtest.py 2>&1 | tee "${RUNNER_TEMP}/monthly-backtest.log"
 
-      - name: Run weekly Learning
-        if: success()
-        working-directory: app
-        run: |
-          set -o pipefail
-          python okx_quant/weekly_learning.py 2>&1 | tee "${RUNNER_TEMP}/weekly-learning.log"
-
-      - name: Upload weekly logs
+      - name: Upload monthly logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: weekly-backtest-logs-${{ github.run_id }}
+          name: monthly-backtest-logs-${{ github.run_id }}
           path: |
-            ${{ runner.temp }}/weekly-tests.log
-            ${{ runner.temp }}/weekly-backtest.log
-            ${{ runner.temp }}/weekly-learning.log
+            ${{ runner.temp }}/monthly-tests.log
+            ${{ runner.temp }}/monthly-backtest.log
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 30
