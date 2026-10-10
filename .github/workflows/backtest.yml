@@ -4,6 +4,7 @@ on:
   # Run a fresh backtest when this workflow definition is updated; this also
   # allows validating the latest application code and performance settings.
   push:
+    branches: [main]
     paths:
       - '.github/workflows/backtest.yml'
   schedule:
