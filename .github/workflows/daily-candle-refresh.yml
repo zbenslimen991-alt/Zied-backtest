@@ -1,0 +1,111 @@
+name: Daily Historical Candle Refresh
+
+on:
+  schedule:
+    # Refresh stored market history every day at 02:00 UTC, before monthly batch runs.
+    - cron: '0 2 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  refresh-candles:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    concurrency:
+      # Shared app repository state: never refresh candles while backtest/learning writes it.
+      group: okx-quant-portfolio-state
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout private app repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.APP_REPO }}
+          token: ${{ secrets.APP_REPO_TOKEN }}
+          path: app
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: app/requirements.txt
+
+      - name: Install dependencies
+        working-directory: app
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Refresh historical candles from OKX
+        working-directory: app
+        env:
+          PYTHONPATH: ${{ github.workspace }}/app/okx_quant
+        run: |
+          set -o pipefail
+          python - <<'PY' 2>&1 | tee "${RUNNER_TEMP}/candle-refresh.log"
+          import os
+          import sys
+          import time
+          from api import get_pairs
+          from candle_store import update_historical_candles, update_timeframe_candles
+
+          pairs = get_pairs()
+          if not pairs:
+              raise SystemExit("ERROR: OKX returned no eligible USDT spot instruments; refusing to report a successful refresh.")
+
+          # Keep in sync with the multi-timeframe history used by the backtest.
+          timeframes = [("15m", 5000), ("4H", 3000), ("1D", 1000)]
+          total = len(pairs)
+          failures = []
+          print(f"[Daily Candle Refresh] eligible_pairs={total}")
+
+          for index, item in enumerate(pairs, 1):
+              inst_id = item.get("instId")
+              if not inst_id:
+                  continue
+              try:
+                  frame, added, last_ts = update_historical_candles(inst_id)
+                  if frame is None or frame.empty:
+                      failures.append(f"{inst_id}:1H")
+                  for timeframe, target in timeframes:
+                      refreshed = update_timeframe_candles(inst_id, timeframe, target)
+                      if refreshed is None or refreshed.empty:
+                          failures.append(f"{inst_id}:{timeframe}")
+                  print(f"[Daily Candle Refresh][PROGRESS] {index}/{total} {inst_id}")
+              except Exception as exc:
+                  failures.append(f"{inst_id}:{type(exc).__name__}:{exc}")
+                  print(f"[Daily Candle Refresh][ERROR] {inst_id}: {exc}")
+          print(f"[Daily Candle Refresh][SUMMARY] pairs={total} failures={len(failures)}")
+          if failures:
+              print("[Daily Candle Refresh][FAILED_ITEMS] " + "; ".join(failures[:100]))
+              raise SystemExit(1)
+          PY
+
+      - name: Commit refreshed candle history to app repository
+        working-directory: app
+        env:
+          APP_REPO: ${{ secrets.APP_REPO }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add candle_history
+          if git diff --cached --quiet; then
+            echo "No candle-history changes to commit."
+            exit 0
+          fi
+          git commit -m "Refresh daily historical candle cache"
+          git push
+
+      - name: Upload candle refresh log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-candle-refresh-${{ github.run_id }}
+          path: ${{ runner.temp }}/candle-refresh.log
+          if-no-files-found: ignore
+          retention-days: 30
