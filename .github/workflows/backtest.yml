@@ -70,15 +70,15 @@ jobs:
           python okx_quant/weekly_backtest.py 2>&1 | tee "${RUNNER_TEMP}/weekly-backtest.log"
 
       - name: Dispatch next independent 20-coin run
-        if: success() && fromJSON(steps.backtest.outputs.batch_index) + 1 < fromJSON(steps.backtest.outputs.total_batches)
+        if: success() && steps.backtest.outputs.is_last_batch == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
-          NEXT_BATCH: ${{ fromJSON(steps.backtest.outputs.batch_index) + 1 }}
+          NEXT_BATCH: ${{ steps.backtest.outputs.next_batch_index }}
           WORKFLOW_REF: ${{ github.ref_name }}
         run: gh workflow run backtest.yml --ref "$WORKFLOW_REF" -f batch_index="$NEXT_BATCH"
 
       - name: Run weekly Learning
-        if: success() && fromJSON(steps.backtest.outputs.batch_index) + 1 >= fromJSON(steps.backtest.outputs.total_batches)
+        if: success() && steps.backtest.outputs.is_last_batch == 'true'
         working-directory: app
         run: |
           set -o pipefail
