@@ -12,7 +12,7 @@ permissions:
 jobs:
   refresh-candles:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 350
     concurrency:
       # Shared app repository state: never refresh candles while backtest/learning writes it.
       group: okx-quant-portfolio-state
