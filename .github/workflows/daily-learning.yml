@@ -1,20 +1,19 @@
-name: Monthly Backtest
+name: Daily Learning
 
 on:
   schedule:
-    # First day of each month at 03:00 UTC
-    - cron: '0 3 1 * *'
+    # Run daily at 04:00 UTC
+    - cron: '0 4 * * *'
   workflow_dispatch: {}
 
 permissions:
   contents: read
 
 jobs:
-  monthly-backtest:
+  daily-learning:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
-    # Shared across workflows so monthly backtest and daily learning never
-    # write the shared portfolio/model state concurrently.
+    timeout-minutes: 90
+    # Same group as Monthly Backtest: protects shared persisted state.
     concurrency:
       group: okx-quant-portfolio-state
       cancel-in-progress: false
@@ -39,29 +38,19 @@ jobs:
         working-directory: app
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pytest
+          pip install -r requirements.txt
 
-      - name: Run tests
+      - name: Run daily Learning
         working-directory: app
         run: |
           set -o pipefail
-          python -m pytest -q 2>&1 | tee "${RUNNER_TEMP}/monthly-tests.log"
+          python okx_quant/weekly_learning.py 2>&1 | tee "${RUNNER_TEMP}/daily-learning.log"
 
-      - name: Run monthly Backtest
-        working-directory: app
-        env:
-          FORCE_WEEKLY_BACKTEST: '1'
-        run: |
-          set -o pipefail
-          python okx_quant/weekly_backtest.py 2>&1 | tee "${RUNNER_TEMP}/monthly-backtest.log"
-
-      - name: Upload monthly logs
+      - name: Upload daily learning log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: monthly-backtest-logs-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/monthly-tests.log
-            ${{ runner.temp }}/monthly-backtest.log
+          name: daily-learning-log-${{ github.run_id }}
+          path: ${{ runner.temp }}/daily-learning.log
           if-no-files-found: ignore
-          retention-days: 30
+          retention-days: 14
