@@ -52,6 +52,7 @@ jobs:
           import os
           import sys
           import time
+          from concurrent.futures import ThreadPoolExecutor, as_completed
           from api import get_pairs
           from candle_store import update_historical_candles, update_timeframe_candles
 
@@ -64,11 +65,12 @@ jobs:
           total = len(pairs)
           failures = []
           print(f"[Daily Candle Refresh] eligible_pairs={total}")
+          print("[Daily Candle Refresh] workers=3; API request throttling remains enabled")
 
-          for index, item in enumerate(pairs, 1):
+          def refresh_one(index, item):
               inst_id = item.get("instId")
               if not inst_id:
-                  continue
+                  return
               try:
                   frame, added, last_ts = update_historical_candles(inst_id)
                   if frame is None or frame.empty:
@@ -81,6 +83,18 @@ jobs:
               except Exception as exc:
                   failures.append(f"{inst_id}:{type(exc).__name__}:{exc}")
                   print(f"[Daily Candle Refresh][ERROR] {inst_id}: {exc}")
+
+          # Overlap network wait time for different instruments while the
+          # shared api.py throttle continues spacing individual OKX requests.
+          # A small fixed pool avoids launching hundreds of requests at once.
+          with ThreadPoolExecutor(max_workers=3) as executor:
+              futures = [
+                  executor.submit(refresh_one, index, item)
+                  for index, item in enumerate(pairs, 1)
+              ]
+              for future in as_completed(futures):
+                  future.result()
+
           print(f"[Daily Candle Refresh][SUMMARY] pairs={total} failures={len(failures)}")
           if failures:
               print("[Daily Candle Refresh][FAILED_ITEMS] " + "; ".join(failures[:100]))
