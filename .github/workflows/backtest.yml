@@ -2,7 +2,7 @@ name: Weekly Backtest + Learning
 
 on:
   # Run a fresh backtest when this workflow definition is updated; this also
-  # allows validating the latest application code immediately after a repair.
+  # allows validating the latest application code and performance settings.
   push:
     paths:
       - '.github/workflows/backtest.yml'
