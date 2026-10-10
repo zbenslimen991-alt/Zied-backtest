@@ -8,7 +8,13 @@ on:
       - '.github/workflows/backtest.yml'
   schedule:
     - cron: '0 3 * * 0'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      batch_index:
+        description: 'Zero-based batch index (20 coins per run)'
+        required: false
+        default: '0'
+        type: string
 
 permissions:
   contents: read
@@ -53,15 +59,26 @@ jobs:
           python -m pytest -q 2>&1 | tee "${RUNNER_TEMP}/weekly-tests.log"
 
       - name: Run weekly Backtest
+        id: backtest
         working-directory: app
         env:
           FORCE_WEEKLY_BACKTEST: '1'
+          BACKTEST_BATCH_SIZE: '20'
+          BACKTEST_BATCH_INDEX: ${{ inputs.batch_index || '0' }}
         run: |
           set -o pipefail
           python okx_quant/weekly_backtest.py 2>&1 | tee "${RUNNER_TEMP}/weekly-backtest.log"
 
+      - name: Dispatch next independent 20-coin run
+        if: success() && fromJSON(steps.backtest.outputs.batch_index) + 1 < fromJSON(steps.backtest.outputs.total_batches)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEXT_BATCH: ${{ fromJSON(steps.backtest.outputs.batch_index) + 1 }}
+          WORKFLOW_REF: ${{ github.ref_name }}
+        run: gh workflow run backtest.yml --ref "$WORKFLOW_REF" -f batch_index="$NEXT_BATCH"
+
       - name: Run weekly Learning
-        if: success()
+        if: success() && fromJSON(steps.backtest.outputs.batch_index) + 1 >= fromJSON(steps.backtest.outputs.total_batches)
         working-directory: app
         run: |
           set -o pipefail
