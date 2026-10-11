@@ -70,7 +70,7 @@ jobs:
           WORKFLOW_REF: ${{ github.ref_name }}
         run: |
           NEXT_RETRY=$((RETRY_COUNT + 1))
-          gh workflow run independent-batch-backtest.yml --ref "$WORKFLOW_REF" -f batch_index="$CURRENT_BATCH" -f retry_count="$NEXT_RETRY"
+          gh workflow run independent-batch-backtest.yml --repo "$GITHUB_REPOSITORY" --ref "$WORKFLOW_REF" -f batch_index="$CURRENT_BATCH" -f retry_count="$NEXT_RETRY"
 
       - name: Dispatch next independent 20-coin run
         if: success() && steps.backtest.outputs.is_last_batch == 'false'
@@ -78,7 +78,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NEXT_BATCH: ${{ steps.backtest.outputs.next_batch_index }}
           WORKFLOW_REF: ${{ github.ref_name }}
-        run: gh workflow run independent-batch-backtest.yml --ref "$WORKFLOW_REF" -f batch_index="$NEXT_BATCH" -f retry_count=0
+        run: gh workflow run independent-batch-backtest.yml --repo "$GITHUB_REPOSITORY" --ref "$WORKFLOW_REF" -f batch_index="$NEXT_BATCH" -f retry_count=0
 
       - name: Run weekly Learning after final batch
         if: success() && steps.backtest.outputs.is_last_batch == 'true'
