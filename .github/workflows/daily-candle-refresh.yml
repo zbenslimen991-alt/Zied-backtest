@@ -1,10 +1,9 @@
-name: Every-Other-Day Historical Candle Refresh
+name: Daily Historical Candle Refresh
 
 on:
   schedule:
-    # Refresh stored market history every other calendar day at 02:00 UTC.
-    # GitHub cron day-of-month stepping is calendar-based (*/2).
-    - cron: '0 2 */2 * *'
+    # Refresh stored market history every day at 02:00 UTC.
+    - cron: '0 2 * * *'
   workflow_dispatch: {}
 
 permissions:
