@@ -1,13 +1,13 @@
-name: Independent 20-Coin Backtest Batches
+name: Continuous One-Coin-at-a-Time Backtest
 
 on:
   schedule:
-    # First day of each month at 03:00 UTC
+    # Start (or resume) the continuous cycle on the first day of each month.
     - cron: '0 3 1 * *'
   workflow_dispatch:
     inputs:
       batch_index:
-        description: 'Zero-based batch index (20 coins per run)'
+        description: 'Zero-based coin index; one coin is processed per run'
         required: false
         default: '0'
         type: string
@@ -22,7 +22,7 @@ permissions:
   actions: write
 
 jobs:
-  backtest-batch:
+  backtest-one-coin:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     concurrency:
@@ -50,18 +50,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pytest
 
-      - name: Run current 20-coin batch
+      - name: Backtest exactly one coin
         id: backtest
         working-directory: app
         env:
           FORCE_WEEKLY_BACKTEST: '1'
-          BACKTEST_BATCH_SIZE: '20'
+          BACKTEST_BATCH_SIZE: '1'
           BACKTEST_BATCH_INDEX: ${{ inputs.batch_index || '0' }}
         run: |
           set -o pipefail
-          python okx_quant/weekly_backtest.py 2>&1 | tee "${RUNNER_TEMP}/batch-backtest.log"
+          python okx_quant/weekly_backtest.py 2>&1 | tee "${RUNNER_TEMP}/coin-backtest.log"
 
-      - name: Retry failed batch (up to 2 retries)
+      - name: Retry failed coin (up to 2 retries)
         if: failure() && inputs.retry_count != '2'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -70,31 +70,37 @@ jobs:
           WORKFLOW_REF: ${{ github.ref_name }}
         run: |
           NEXT_RETRY=$((RETRY_COUNT + 1))
-          gh workflow run independent-batch-backtest.yml --repo "$GITHUB_REPOSITORY" --ref "$WORKFLOW_REF" -f batch_index="$CURRENT_BATCH" -f retry_count="$NEXT_RETRY"
+          gh workflow run continuous-one-coin-backtest.yml --repo "$GITHUB_REPOSITORY" --ref "$WORKFLOW_REF" -f batch_index="$CURRENT_BATCH" -f retry_count="$NEXT_RETRY"
 
-      - name: Dispatch next independent 20-coin run
+      - name: Dispatch next coin
         if: success() && steps.backtest.outputs.is_last_batch == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
           NEXT_BATCH: ${{ steps.backtest.outputs.next_batch_index }}
           WORKFLOW_REF: ${{ github.ref_name }}
-        run: gh workflow run independent-batch-backtest.yml --repo "$GITHUB_REPOSITORY" --ref "$WORKFLOW_REF" -f batch_index="$NEXT_BATCH" -f retry_count=0
+        run: gh workflow run continuous-one-coin-backtest.yml --repo "$GITHUB_REPOSITORY" --ref "$WORKFLOW_REF" -f batch_index="$NEXT_BATCH" -f retry_count=0
 
-      - name: Run weekly Learning after final batch
+      - name: Run learning after all eligible coins finish
         if: success() && steps.backtest.outputs.is_last_batch == 'true'
         working-directory: app
         run: |
           set -o pipefail
-          python okx_quant/weekly_learning.py 2>&1 | tee "${RUNNER_TEMP}/batch-learning.log"
+          python okx_quant/weekly_learning.py 2>&1 | tee "${RUNNER_TEMP}/cycle-learning.log"
 
-      - name: Upload batch logs
+      - name: Restart from the first coin for a new full cycle
+        if: success() && steps.backtest.outputs.is_last_batch == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_REF: ${{ github.ref_name }}
+        run: gh workflow run continuous-one-coin-backtest.yml --repo "$GITHUB_REPOSITORY" --ref "$WORKFLOW_REF" -f batch_index=0 -f retry_count=0
+
+      - name: Upload backtest logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: independent-backtest-batch-${{ inputs.batch_index || '0' }}-${{ github.run_id }}
+          name: one-coin-backtest-${{ inputs.batch_index || '0' }}-${{ github.run_id }}
           path: |
-            ${{ runner.temp }}/batch-tests.log
-            ${{ runner.temp }}/batch-backtest.log
-            ${{ runner.temp }}/batch-learning.log
+            ${{ runner.temp }}/coin-backtest.log
+            ${{ runner.temp }}/cycle-learning.log
           if-no-files-found: ignore
           retention-days: 30
