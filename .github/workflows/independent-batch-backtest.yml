@@ -70,7 +70,7 @@ jobs:
           WORKFLOW_REF: ${{ github.ref_name }}
         run: |
           NEXT_RETRY=$((RETRY_COUNT + 1))
-          gh workflow run continuous-one-coin-backtest.yml --repo "$GITHUB_REPOSITORY" --ref "$WORKFLOW_REF" -f batch_index="$CURRENT_BATCH" -f retry_count="$NEXT_RETRY"
+          gh workflow run independent-batch-backtest.yml --repo "$GITHUB_REPOSITORY" --ref "$WORKFLOW_REF" -f batch_index="$CURRENT_BATCH" -f retry_count="$NEXT_RETRY"
 
       - name: Dispatch next coin
         if: success() && steps.backtest.outputs.is_last_batch == 'false'
@@ -78,7 +78,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NEXT_BATCH: ${{ steps.backtest.outputs.next_batch_index }}
           WORKFLOW_REF: ${{ github.ref_name }}
-        run: gh workflow run continuous-one-coin-backtest.yml --repo "$GITHUB_REPOSITORY" --ref "$WORKFLOW_REF" -f batch_index="$NEXT_BATCH" -f retry_count=0
+        run: gh workflow run independent-batch-backtest.yml --repo "$GITHUB_REPOSITORY" --ref "$WORKFLOW_REF" -f batch_index="$NEXT_BATCH" -f retry_count=0
 
       - name: Run learning after all eligible coins finish
         if: success() && steps.backtest.outputs.is_last_batch == 'true'
@@ -92,7 +92,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           WORKFLOW_REF: ${{ github.ref_name }}
-        run: gh workflow run continuous-one-coin-backtest.yml --repo "$GITHUB_REPOSITORY" --ref "$WORKFLOW_REF" -f batch_index=0 -f retry_count=0
+        run: gh workflow run independent-batch-backtest.yml --repo "$GITHUB_REPOSITORY" --ref "$WORKFLOW_REF" -f batch_index=0 -f retry_count=0
 
       - name: Upload backtest logs
         if: always()
