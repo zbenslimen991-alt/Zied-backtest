@@ -83,8 +83,6 @@ jobs:
       - name: Run learning after all eligible coins finish
         if: success() && steps.backtest.outputs.is_last_batch == 'true'
         working-directory: app
-        env:
-          ZIED_TRAIN_HISTORICAL_AI: "0"
         run: |
           set -o pipefail
           python okx_quant/weekly_learning.py 2>&1 | tee "${RUNNER_TEMP}/cycle-learning.log"
